@@ -1,13 +1,13 @@
-
+// Fondo tierra/agua
 var waterLand = ee.Image('NOAA/NGDC/ETOPO1').select('bedrock').gt(0.0);
 var waterLandBackground = waterLand.visualize({ palette: ['cadetblue', 'lightgray'] });
 Map.addLayer(waterLandBackground, {}, 'background');
 
-
+// Fecha actual y una semana atrás
 var today = ee.Date(Date.now());
 var start = today.advance(-7, 'day');
 
-
+// Temperatura superficial del mar (SST)
 var sstCollection = ee.ImageCollection('NOAA/CDR/OISST/V2_1')
   .filterDate(start, today)
   .select('sst');
@@ -29,10 +29,10 @@ var sstVis = {
 
 Map.addLayer(sst, sstVis, 'Temperatura del Mar');
 
-
+// Colección de ciclones
 var fullDataset = ee.FeatureCollection('NOAA/IBTrACS/v4');
 
-
+// Filtros por región
 var regionFilters = {
   'Peninsula': ee.Filter.eq('BASIN', 'NA'),
   'Atlántico Sur': ee.Filter.eq('BASIN', 'SA'),
@@ -44,7 +44,7 @@ var regionFilters = {
   'Pacífico Sur': ee.Filter.eq('BASIN', 'SP')
 };
 
-
+// Coordenadas por región
 var regionCenters = {
   'Peninsula': [-75, 20],
   'Atlántico Sur': [-30, -15],
@@ -56,7 +56,7 @@ var regionCenters = {
   'Pacífico Sur': [-150, -20]
 };
 
-
+// UI Panel
 var label = ui.Label('Selecciona una región, año y ciclón');
 var regionSelect = ui.Select({
   items: Object.keys(regionFilters),
@@ -77,7 +77,7 @@ panel.style().set({
   padding: '8px'
 });
 
-
+// Años disponibles
 var availableYears = ['1980','1985','1990','1995','2000','2005','2010','2015','2020','2021','2022','2023'];
 var currentYear = ee.Date(Date.now()).get('year').format().getInfo();
 if (availableYears.indexOf(currentYear) === -1) {
@@ -86,7 +86,7 @@ if (availableYears.indexOf(currentYear) === -1) {
 yearSelect.items().reset(availableYears);
 yearSelect.setValue(currentYear);
 
-
+// Mostrar trayectoria del ciclón
 function showStorm(year, stormId) {
   Map.layers().reset();
   Map.addLayer(waterLandBackground, {}, 'background');
@@ -141,13 +141,13 @@ function showStorm(year, stormId) {
     });
   });
 
-
+  // Obtener fecha del primer punto del ciclón
   filtered.sort('ISO_TIME').first().get('ISO_TIME').evaluate(function(isoTime) {
     if (isoTime) {
       var isoTimeFixed = isoTime.replace(' ', 'T');
       var stormDate = ee.Date(isoTimeFixed);
 
-
+      // Imagen GOES-16 cercana
       var goesImage = ee.ImageCollection('NOAA/GOES/16/MCMIPF')
         .filterDate(stormDate.advance(-15, 'minute'), stormDate.advance(15, 'minute'))
         .select('CMI_C13')
@@ -186,7 +186,7 @@ function showStorm(year, stormId) {
   });
 }
 
-
+// Cambiar año → cargar ciclones
 function onYearChange(year) {
   stormSelect.items().reset([]);
   stormSelect.setPlaceholder('Cargando ciclones...');
@@ -235,7 +235,7 @@ regionSelect.onChange(function() {
 regionSelect.setValue('Peninsula', false);
 onYearChange(currentYear);
 
-
+// Leyenda de viento
 var legend = ui.Panel({
   style: {
     position: 'bottom-right',
@@ -270,7 +270,7 @@ legendItems.forEach(function(item) {
 });
 Map.add(legend);
 
-
+// Leyenda de SST
 var sstLegend = ui.Panel({
   style: {
     position: 'top-right',
@@ -307,7 +307,7 @@ sstItems.forEach(function(item) {
 });
 Map.add(sstLegend);
 
-
+// Imagen GOES-16 actual
 var goesImage = ee.ImageCollection('NOAA/GOES/16/MCMIPF')
   .filterDate(ee.Date(Date.now()).advance(-1, 'hour'), ee.Date(Date.now()))
   .select('CMI_C13')
@@ -318,3 +318,40 @@ Map.addLayer(goesImage, {
   max: 300,
   palette: ['black', 'purple', 'blue', 'green', 'yellow', 'red']
 }, 'GOES-16 IR (actual)');
+
+
+function resetView() {
+  Map.layers().reset();
+  Map.addLayer(waterLandBackground, {}, 'background');
+  Map.addLayer(sst, sstVis, 'Temperatura del Mar');
+
+  // GOES-16 IR más reciente (última hora)
+  var recentGOES = ee.ImageCollection('NOAA/GOES/16/MCMIPF')
+    .filterDate(ee.Date(Date.now()).advance(-1, 'hour'), ee.Date(Date.now()))
+    .select('CMI_C13')
+    .median();
+
+  // Añadir directamente (sin evaluate)
+  Map.addLayer(recentGOES, {
+    min: 150,
+    max: 300,
+    palette: ['black', 'purple', 'blue', 'green', 'yellow', 'red']
+  }, 'GOES-16 IR (actual)');
+
+  // Centrar mapa
+  Map.setCenter(regionCenters["Peninsula"][0], regionCenters["Peninsula"][1], 5);
+}
+
+
+// Botón para resetear la vista
+var resetButton = ui.Button({
+  label: '🔄 Restablecer vista',
+  style: {
+    stretch: 'horizontal',
+    margin: '10px 0px 0px 0px'
+  },
+  onClick: resetView
+});
+panel.add(resetButton);
+
+
